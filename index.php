@@ -299,6 +299,26 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
       gtag('js', new Date());
       gtag('config', 'G-2L2EV10ZWW');
     </script>
+<script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Pico y Placa Colombia",
+      "operatingSystem": "ANDROID, IOS, WEB",
+      "applicationCategory": "UtilityApplication",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "1250"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "COP"
+      }
+    }
+    </script>
+
 </head>
 <body class="<?= $es_busqueda ? 'search-result-mode' : ($body_class_mode ?? 'home-mode') ?>" data-city-slug="<?= $ciudad_busqueda ?>">
     
