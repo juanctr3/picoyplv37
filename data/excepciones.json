@@ -1,0 +1,44 @@
+[
+    {
+        "fecha": "2025-12-26",
+        "ciudad": "bogota",
+        "tipo": "particulares",
+        "motivo": "La alcald\u00eda de Bogot\u00e1 ha decretado que hoy no hay pico y placa. Feliz viaje y feliz a\u00f1o"
+    },
+    {
+        "fecha": "2026-01-02",
+        "ciudad": "bogota",
+        "tipo": "particulares",
+        "motivo": "La alcald\u00eda de Bogot\u00e1 ha decretado que hoy no hay pico y placa. Feliz viaje y feliz a\u00f1o nuevo"
+    },
+    {
+        "fecha": "2025-12-23",
+        "ciudad": "medellin",
+        "tipo": "particulares",
+        "motivo": "Levantamiento de pido y placa por fin de a\u00f1o, Feliz Navidad le desea PicoyPlacaBogota.com.co"
+    },
+    {
+        "fecha": "2025-12-23",
+        "ciudad": "medellin",
+        "tipo": "motos",
+        "motivo": "Levantamiento de pido y placa por fin de a\u00f1o, Feliz Navidad le desea PicoyPlacaBogota.com.co"
+    },
+    {
+        "fecha": "2025-12-26",
+        "ciudad": "medellin",
+        "tipo": "todos",
+        "motivo": "Levantamiento de pido y placa por fin de a\u00f1o, Feliz Navidad le desea PicoyPlacaBogota.com.co"
+    },
+    {
+        "fecha": "2025-12-23",
+        "ciudad": "medellin",
+        "tipo": "todos",
+        "motivo": "Levantamiento de pico y placa por fin de a\u00f1o, Feliz Navidad le desea PicoyPlacaBogota.com.co"
+    },
+    {
+        "fecha": "2025-12-26",
+        "ciudad": "medellin",
+        "tipo": "todos",
+        "motivo": "Levantamiento de pico y placa por fin de a\u00f1o, Feliz Navidad le desea PicoyPlacaBogota.com.co"
+    }
+]
