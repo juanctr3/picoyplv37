@@ -1,0 +1,128 @@
+{
+  "rotaciones_base": {
+    "rotacion_1": {"1":["1","2"], "2":["3","4"], "3":["5","6"], "4":["7","8"], "5":["9","0"]},
+    "rotacion_2": {"1":["3","4"], "2":["5","6"], "3":["7","8"], "4":["9","0"], "5":["1","2"]},
+    "rotacion_3": {"1":["6","9"], "2":["5","7"], "3":["1","8"], "4":["0","2"], "5":["3","4"]},
+    "rotacion_4": {"1":["5","6"], "2":["7","8"], "3":["9","0"], "4":["1","2"], "5":["3","4"]},
+    "rotacion_5": {"1":["0","1"], "2":["2","3"], "3":["4","5"], "4":["6","7"], "5":["8","9"]},
+    "rotacion_6": {"1":["7","8"], "2":["9","0"], "3":["1","2"], "4":["3","4"], "5":["5","6"]}
+  },
+  "ciudades": {
+    "bogota": {
+      "nombre": "Bogotá",
+      "contenido_seo": "<p>El <strong>Pico y Placa en Bogotá</strong> opera bajo un esquema de días pares e impares...</p>",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "6:00 AM - 9:00 PM", "regla": "bogota_paridad" },
+        "taxis": { "nombre_display": "Taxis", "horario": "5:30 AM - 9:00 PM", "regla": "bogota_taxis" },
+        "servicio-especial": { "nombre_display": "Servicio Especial", "horario": "5:30 AM - 9:00 PM", "regla": "bogota_servicio_especial" },
+        "carga-mas-20": { "nombre_display": "Carga > 20 años", "horario": "Sábados: 5:00 AM - 9:00 PM", "regla": "bogota_carga_sabado" }
+      }
+    },
+    "medellin": {
+      "nombre": "Medellín",
+      "contenido_seo": "<p>En <strong>Medellín y el Valle de Aburrá</strong>, la medida rota semestralmente...</p>",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "5:00 AM - 8:00 PM", "regla": "rotacion_3" },
+        "motos": { "nombre_display": "Motos", "horario": "5:00 AM - 8:00 PM", "regla": "rotacion_3" },
+        "taxis": { "nombre_display": "Taxis", "horario": "6:00 AM - 8:00 PM", "regla": "medellin_taxis" }
+      }
+    },
+    "cali": {
+      "nombre": "Cali",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "6:00 AM - 7:00 PM", "regla": "rotacion_2" },
+        "transporte-colectivo": { "nombre_display": "Transporte Público Colectivo", "horario": "5:00 AM - 10:00 PM", "regla": "cali_colectivo" }
+      }
+    },
+    "barranquilla": {
+      "nombre": "Barranquilla",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "Sin restricción activa.", "regla": "sin_pico" },
+        "taxis": { "nombre_display": "Taxis", "horario": "Sin restricción general.", "regla": "sin_pico" }
+      }
+    },
+    "cartagena": {
+      "nombre": "Cartagena",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "7:00 AM - 6:00 PM", "regla": "rotacion_2" },
+        "motos": { "nombre_display": "Motos", "horario": "7:00 AM - 6:00 PM", "regla": "rotacion_2" }
+      }
+    },
+    "bucaramanga": {
+      "nombre": "Bucaramanga",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "L-V: 6:00 AM - 8:00 PM | Sábados: 9:00 AM - 1:00 PM", "regla": "rotacion_2" },
+        "motos": { "nombre_display": "Motos", "horario": "6:00 AM - 8:00 PM", "regla": "bucaramanga_motos" },
+        "taxis": { "nombre_display": "Taxis", "horario": "Todo el día", "regla": "bucaramanga_taxis" }
+      }
+    },
+    "santa-marta": {
+      "nombre": "Santa Marta",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "7:00 AM-9:00 AM, 11:30 AM-2:00 PM, 5:00 PM-8:00 PM", "regla": "rotacion_1" },
+        "taxis": { "nombre_display": "Taxis", "horario": "7:00 AM - 11:59 PM", "regla": "santa_marta_taxis" }
+      }
+    },
+    "armenia": {
+      "nombre": "Armenia",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "6:00 AM - 7:00 PM", "regla": "rotacion_4" },
+        "taxis": { "nombre_display": "Taxis", "horario": "Todo el día", "regla": "armenia_taxis" }
+      }
+    },
+    "tunja": {
+      "nombre": "Tunja",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "6:00 AM - 8:00 PM", "regla": "rotacion_2" }
+      }
+    },
+    "ibague": {
+      "nombre": "Ibagué",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "Horario triple", "regla": "rotacion_5" },
+        "taxis": { "nombre_display": "Taxis", "horario": "Todo el día", "regla": "ibague_taxis" }
+      }
+    },
+    "pereira": {
+      "nombre": "Pereira",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "6:00 AM - 8:00 PM", "regla": "rotacion_5" },
+        "taxis": { "nombre_display": "Taxis", "horario": "7:00 AM - 3:00 AM", "regla": "pereira_taxis" }
+      }
+    },
+    "popayan": {
+      "nombre": "Popayán",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "6:00 AM - 7:00 PM", "regla": "rotacion_2" },
+        "carga-menor": { "nombre_display": "Carga < 1.5t", "horario": "7:00 AM - 8:00 PM", "regla": "popayan_carga" }
+      }
+    },
+    "villavicencio": {
+      "nombre": "Villavicencio",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "6:00 AM - 8:00 PM", "regla": "rotacion_6" },
+        "taxis": { "nombre_display": "Taxis", "horario": "6:00 AM - 12:00 PM", "regla": "villavicencio_taxis" }
+      }
+    },
+    "cucuta": {
+      "nombre": "Cúcuta",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "Horario triple", "regla": "rotacion_1" },
+        "taxis": { "nombre_display": "Taxis", "horario": "7:00 AM - 8:00 PM", "regla": "cucuta_taxis" }
+      }
+    },
+    "buenaventura": {
+      "nombre": "Buenaventura",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "7:00 AM - 7:00 PM", "regla": "rotacion_2" },
+        "taxis": { "nombre_display": "Taxis", "horario": "7:00 AM - 7:00 PM", "regla": "buenaventura_taxis" }
+      }
+    },
+    "pasto": {
+      "nombre": "Pasto",
+      "tipos": {
+        "particulares": { "nombre_display": "Particulares", "horario": "7:30 AM - 7:00 PM", "regla": "pasto_particulares" }
+      }
+    }
+  }
+}
