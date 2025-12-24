@@ -1,0 +1,15 @@
+# admin/.htaccess
+DirectoryIndex index.php
+Options -Indexes
+
+# Proteger archivos sensibles
+<FilesMatch "\.(php|inc)$">
+    Order Allow,Deny
+    Allow from all
+</FilesMatch>
+
+# Bloquear acceso directo a archivos de log o json si los hubiera
+<FilesMatch "\.(log|json)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
