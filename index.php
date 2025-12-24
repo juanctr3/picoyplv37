@@ -1,7 +1,7 @@
 <?php
 /**
  * index.php
- * Versión 37.0 - Tracking de Instalaciones (GA4)
+ * Versión 37.7 - Lógica de "Medida Finalizada" + Countdown al día siguiente + Noticias WP
  */
 
 // 1. Configuración inicial
@@ -41,6 +41,7 @@ if (!file_exists($sitemapFile) || date('Y-m-d', filemtime($sitemapFile)) !== dat
         $slug_fecha = sprintf('%d-de-%s-de-%s', $d_sm, $MESES_SM[$m_num_sm], $y_sm);
 
         foreach ($ciudades_sm as $c_slug => $c_data) {
+            if(!is_array($c_data)) continue;
             $loc = "{$BASE_URL_SM}/pico-y-placa/{$c_slug}-{$slug_fecha}";
             $prio = number_format(max(0.5, 0.9 - ($i / $DIAS_SM)), 2, '.', '');
             $xml .= "  <url><loc>{$loc}</loc><lastmod>{$hoy_sm}</lastmod><changefreq>daily</changefreq><priority>{$prio}</priority></url>\n";
@@ -62,7 +63,6 @@ $BASE_URL = 'https://picoyplacabogota.com.co';
 $SITIO_NOMBRE = 'PicoYPlacaBogota.com.co';
 
 $MESES = ['01'=>'enero','02'=>'febrero','03'=>'marzo','04'=>'abril','05'=>'mayo','06'=>'junio','07'=>'julio','08'=>'agosto','09'=>'septiembre','10'=>'octubre','11'=>'noviembre','12'=>'diciembre'];
-$MESES_CORTOS = ['01'=>'Ene','02'=>'Feb','03'=>'Mar','04'=>'Abr','05'=>'May','06'=>'Jun','07'=>'Jul','08'=>'Ago','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Dic'];
 $DIAS_SEMANA = [1=>'lunes',2=>'martes',3=>'miércoles',4=>'jueves',5=>'viernes',6=>'sábado',7=>'domingo'];
 
 // Enrutamiento
@@ -124,6 +124,19 @@ if (!isset($ciudades[$ciudad_busqueda]['tipos'][$tipo_busqueda])) {
 $resultados = $picoYPlaca->obtenerRestriccion($ciudad_busqueda, $fecha_busqueda, $tipo_busqueda);
 $nombre_festivo = $resultados['festivo'] ?? null;
 
+// --- BÚSQUEDA MANUAL DE MOTIVO DE EXCEPCIÓN ---
+$motivo_excepcion = null;
+if (isset($ciudades['excepciones_manuales'])) {
+    foreach ($ciudades['excepciones_manuales'] as $ex) {
+        if ($ex['fecha'] === $fecha_busqueda && $ex['ciudad'] === $ciudad_busqueda) {
+            if ($ex['tipo'] === $tipo_busqueda || $ex['tipo'] === 'todos') {
+                $motivo_excepcion = $ex['motivo'];
+                break;
+            }
+        }
+    }
+}
+
 $nombre_ciudad = $ciudades[$ciudad_busqueda]['nombre'];
 $nombre_tipo = $ciudades[$ciudad_busqueda]['tipos'][$tipo_busqueda]['nombre_display'];
 
@@ -151,18 +164,78 @@ if ($resultados['hay_pico']) {
     }
 }
 
+// --- LÓGICA DE TIEMPO Y ESTADOS (Aquí está la magia de "Medida Finalizada") ---
+$search_target_ts = 0;
+$reloj_label_dinamico = "FALTA:"; 
+$es_medida_finalizada_hoy = false;
+
+if ($resultados['hay_pico'] && $fecha_busqueda === $HOY) { 
+    $now_ts = time(); 
+    $rangos = $ciudades[$ciudad_busqueda]['tipos'][$tipo_busqueda]['rangos_horarios_php'] ?? [];
+    $encontrado_rango = false;
+
+    // 1. Revisar si estamos DENTRO de un horario o ANTES de uno
+    foreach ($rangos as $r) {
+        $inicio_ts = strtotime("$fecha_busqueda " . $r['inicio']);
+        $fin_ts = strtotime("$fecha_busqueda " . $r['fin']);
+        if ($fin_ts < $inicio_ts) $fin_ts += 86400; // Ajuste madrugada
+
+        if ($now_ts < $inicio_ts) {
+            $search_target_ts = $inicio_ts * 1000;
+            $reloj_label_dinamico = "INICIA EN:";
+            $encontrado_rango = true;
+            break; 
+        } elseif ($now_ts >= $inicio_ts && $now_ts < $fin_ts) {
+            $search_target_ts = $fin_ts * 1000;
+            $reloj_label_dinamico = "TERMINA EN:";
+            $encontrado_rango = true;
+            break; 
+        }
+    }
+
+    // 2. Si NO encontramos rango activo y la hora actual es mayor al último fin, la medida terminó hoy.
+    if (!$encontrado_rango) {
+        $ultimo_rango = end($rangos);
+        $fin_ultimo_ts = strtotime("$fecha_busqueda " . $ultimo_rango['fin']);
+        if ($fin_ultimo_ts < strtotime("$fecha_busqueda " . $rangos[0]['inicio'])) $fin_ultimo_ts += 86400;
+
+        if ($now_ts > $fin_ultimo_ts) {
+            $es_medida_finalizada_hoy = true;
+            
+            // 3. Buscar cuándo empieza la medida MAÑANA
+            $f_manana = date('Y-m-d', strtotime('+1 day'));
+            $res_manana = $picoYPlaca->obtenerRestriccion($ciudad_busqueda, $f_manana, $tipo_busqueda);
+            
+            if ($res_manana['hay_pico']) {
+                $rangos_manana = $ciudades[$ciudad_busqueda]['tipos'][$tipo_busqueda]['rangos_horarios_php'] ?? [];
+                if (!empty($rangos_manana)) {
+                    $inicio_manana_ts = strtotime("$f_manana " . $rangos_manana[0]['inicio']);
+                    $search_target_ts = $inicio_manana_ts * 1000;
+                    $reloj_label_dinamico = "PRÓXIMO INICIO:";
+                }
+            } else {
+                $reloj_label_dinamico = "MAÑANA NO APLICA";
+                $search_target_ts = 0;
+            }
+        }
+    }
+}
+
+$next_event_ts = ($fecha_busqueda === $HOY && $search_target_ts > 0) ? $search_target_ts : 0;
+
 // --- SEO TEXTOS ---
 $main_keyword = "Pico y Placa $nombre_ciudad"; 
 $search_description_text = "";
-$search_target_ts = 0;
-$reloj_label_dinamico = "FALTA:"; 
 
 if ($es_hoy) {
     $main_keyword = "Pico y Placa $nombre_ciudad Hoy";
     $titulo_h1_largo = "$main_keyword $dia_nombre $fecha_seo_corta $nombre_tipo";
     $page_title = "$titulo_h1_largo";
     $meta_description = "$main_keyword $dia_nombre $fecha_seo_corta. Revisa al instante las placas restringidas para $nombre_tipo y evita multas hoy en $nombre_ciudad.";
-    if ($nombre_festivo) {
+    
+    if ($motivo_excepcion) {
+        $search_description_text = "Hoy <strong>NO APLICA</strong> la medida. <strong>Motivo:</strong> $motivo_excepcion 🎉. Puedes circular libremente.";
+    } elseif ($nombre_festivo) {
         $search_description_text = "Hoy despues de mucho nos llega un Festivo, ve a lavar tu carrito, se lo merece, anda tranquilo que es <strong>$dia_nombre</strong> Festivo y se celebra <strong>$nombre_festivo</strong> NO HAY PICO Y PLACA.";
     } elseif (!$resultados['hay_pico'] && ($dt->format('N') == 6 || $dt->format('N') == 7)) {
         $search_description_text = "Hoy es <strong>$dia_nombre</strong>... todo es paz y armonia, hasta los policias duermen 😴, sal, vuela pajarito, hoy no tienes pico y placa por que es <strong>$dia_nombre</strong>.";
@@ -178,7 +251,10 @@ if ($es_hoy) {
     $titulo_h1_largo = "$main_keyword $dia_nombre $fecha_seo_corta $nombre_tipo";
     $page_title = "$titulo_h1_largo";
     $meta_description = "$main_keyword $dia_nombre $fecha_seo_corta. Evita multas y consulta las placas restringidas de $nombre_tipo para mañana en $nombre_ciudad.";
-    if ($resultados['hay_pico']) {
+    
+    if ($motivo_excepcion) {
+        $search_description_text = "Mañana <strong>NO APLICA</strong> la medida. <strong>Motivo:</strong> $motivo_excepcion 🎉. Circulación libre.";
+    } elseif ($resultados['hay_pico']) {
         $search_description_text = "$main_keyword $dia_nombre aplica desde <strong>$hora_ini_txt</strong> hasta las <strong>$hora_fin_txt</strong> para $nombre_tipo. Evita los comparendos 💸 que te pueden dañar el día 😫.";
     } else {
         $search_description_text = "Mañana $dia_nombre NO APLICA la medida para $nombre_tipo 🎉. Puedes circular libremente sin riesgo de multa 🚗💨.";
@@ -187,41 +263,18 @@ if ($es_hoy) {
     $titulo_h1_largo = "$main_keyword: $dia_num de $mes_nombre_min de $anio";
     $page_title = "$titulo_h1_largo | $SITIO_NOMBRE";
     $meta_description = "$main_keyword el $dia_nombre $fecha_seo_corta para $nombre_tipo. Consulta placas restringidas, horarios y multas.";
-    if ($resultados['hay_pico']) {
+    
+    if ($motivo_excepcion) {
+        $search_description_text = "Para esta fecha <strong>NO APLICA</strong> la medida. <strong>Motivo:</strong> $motivo_excepcion.";
+    } elseif ($resultados['hay_pico']) {
         $search_description_text = "El <strong>$main_keyword</strong> para $nombre_tipo el $dia_nombre $fecha_seo_corta aplica en horario de <strong>$hora_ini_txt</strong> a <strong>$hora_fin_txt</strong>.";
     } else {
         $search_description_text = "Para el $dia_nombre $fecha_seo_corta no hay medida de Pico y Placa para $nombre_tipo en $nombre_ciudad.";
     }
 }
 
-// --- RELOJ ---
-if ($resultados['hay_pico']) {
-    $now_ts = time(); 
-    $rangos = $ciudades[$ciudad_busqueda]['tipos'][$tipo_busqueda]['rangos_horarios_php'] ?? [];
-    foreach ($rangos as $r) {
-        $inicio_ts = strtotime("$fecha_busqueda " . $r['inicio']);
-        $fin_ts = strtotime("$fecha_busqueda " . $r['fin']);
-        if ($fin_ts < $inicio_ts) $fin_ts += 86400;
-        if ($now_ts < $inicio_ts) {
-            $search_target_ts = $inicio_ts * 1000;
-            $reloj_label_dinamico = "INICIA EN:";
-            break; 
-        } elseif ($now_ts >= $inicio_ts && $now_ts < $fin_ts) {
-            $search_target_ts = $fin_ts * 1000;
-            $reloj_label_dinamico = "TERMINA EN:";
-            break; 
-        }
-    }
-}
-
 $keywords_list = ["$main_keyword", "pico y placa $nombre_ciudad hoy $nombre_tipo", "$main_keyword $fecha_seo_corta", "placas $nombre_ciudad"];
 $meta_keywords = implode(", ", $keywords_list);
-
-$next_event_ts = 0; $reloj_titulo = "FALTA:";
-if ($fecha_busqueda === $HOY && $search_target_ts > 0) {
-    $next_event_ts = $search_target_ts;
-    $reloj_titulo = $reloj_label_dinamico;
-}
 
 // Proyección
 $calendario_personalizado = [];
@@ -253,10 +306,25 @@ for ($i = 0; $i < 30; $i++) {
     $res = $picoYPlaca->obtenerRestriccion($ciudad_busqueda, $f_str, $tipo_busqueda);
     $estado_dia = $res['hay_pico'] ? 'restriccion_general' : 'libre';
     $mensaje_dia = $res['hay_pico'] ? implode('-', $res['restricciones']) : 'Libre';
-    if ($res['festivo']) {
+    
+    // Buscar motivo en calendario tambien
+    $motivo_cal = null;
+    if(isset($ciudades['excepciones_manuales'])) {
+        foreach ($ciudades['excepciones_manuales'] as $ex) {
+            if ($ex['fecha'] === $f_str && $ex['ciudad'] === $ciudad_busqueda && ($ex['tipo'] === $tipo_busqueda || $ex['tipo'] === 'todos')) {
+                $motivo_cal = $ex['motivo']; break;
+            }
+        }
+    }
+
+    if ($motivo_cal) {
+        $mensaje_dia = "<span class='festivo-label' style='background:#e67e22;'>📢 {$motivo_cal}</span>";
+        $estado_dia = 'libre';
+    } elseif ($res['festivo']) {
         $mensaje_dia = "<span class='festivo-label'>🎉 {$res['festivo']}</span>";
         if (!$res['hay_pico']) $estado_dia = 'libre';
     }
+    
     $calendario[] = [
         'd' => $fecha_iter->format('j'),
         'm' => substr(ucfirst($MESES[$fecha_iter->format('m')]), 0, 3),
@@ -267,7 +335,9 @@ for ($i = 0; $i < 30; $i++) {
     $fecha_iter->modify('+1 day');
 }
 
-$bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
+// Color de fondo
+$bg_search_color = ($resultados['hay_pico']) ? '#fff5f5' : (($motivo_excepcion) ? '#fff9f0' : '#f0fff4');
+if ($es_medida_finalizada_hoy) $bg_search_color = '#e3fcec'; // Verde suave si ya finalizó
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -283,14 +353,31 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
     <meta name="theme-color" content="<?= $es_busqueda ? $bg_search_color : ($resultados['hay_pico'] ? '#e74c3c' : '#84fab0') ?>">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicons/favicon-32x32.png">
     
-    <link rel="stylesheet" href="/styles.css?v=36.0">
+    <link rel="stylesheet" href="/styles.css?v=37.7">
     
-    <?php if($es_busqueda): ?>
     <style>
+        <?php if($es_busqueda): ?>
         body { background-color: <?= $bg_search_color ?>; }
-        .search-description { border-left: 6px solid <?= $resultados['hay_pico'] ? '#e74c3c' : '#27ae60' ?>; }
+        .search-description { border-left: 6px solid <?= ($es_medida_finalizada_hoy) ? '#27ae60' : (($resultados['hay_pico']) ? '#e74c3c' : (($motivo_excepcion) ? '#e67e22' : '#27ae60')) ?>; }
+        <?php endif; ?>
+        /* ESTILO PARA ALERTA DE EXCEPCION */
+        .alert-orden-alcaldia {
+            background: #fff3cd; border: 2px solid #ffeeba; color: #856404; 
+            padding: 15px; border-radius: 10px; margin: 20px 0; 
+            font-weight: bold; text-align: center; font-size: 1.1em;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        /* ESTILO PARA NOTICIAS */
+        .news-grid { display: grid; gap: 15px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-top: 15px; }
+        .news-item { 
+            background: #fff; border-left: 5px solid #3498db; padding: 15px; 
+            border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
+            text-decoration: none; color: #2c3e50; display: block; transition: transform 0.2s;
+        }
+        .news-item:hover { transform: translateY(-3px); background: #f8f9fa; }
+        .news-date { font-size: 0.85em; color: #7f8c8d; display: block; margin-bottom: 5px; }
+        .news-title { font-weight: bold; font-size: 1.05em; margin: 0; line-height: 1.4; }
     </style>
-    <?php endif; ?>
     
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-2L2EV10ZWW"></script>
     <script>
@@ -329,12 +416,30 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
     <main class="search-result-container">
         <h1 class="search-title-h1"><?= $titulo_h1_largo ?></h1>
 
+        <?php if ($motivo_excepcion): ?>
+            <div class="alert-orden-alcaldia">
+                📢 Novedad Oficial: <span style="text-transform: uppercase;">"<?= $motivo_excepcion ?>"</span>
+            </div>
+        <?php endif; ?>
+
         <div class="search-description">
             <p><?= $search_description_text ?></p>
-            <?php if($search_target_ts > 0): ?>
-                <div class="countdown-badge">⏳ <?= $reloj_label_dinamico ?> <span id="search-timer">calculando...</span></div>
-            <?php elseif($resultados['hay_pico']): ?>
-                 <div class="countdown-badge" style="background:#27ae60;">✅ Medida finalizada por hoy</div>
+            
+            <?php if($fecha_busqueda === $HOY): ?>
+                <?php if($es_medida_finalizada_hoy): ?>
+                    <div class="countdown-badge" style="background:#27ae60;">✅ MEDIDA FINALIZADA POR HOY</div>
+                    <?php if($search_target_ts > 0): ?>
+                        <div style="margin-top:10px; font-weight:bold; color:#7f8c8d;">
+                            Próximo inicio en: <span id="search-timer" style="color:#2c3e50;">calculando...</span>
+                        </div>
+                    <?php endif; ?>
+                <?php elseif($search_target_ts > 0): ?>
+                    <div class="countdown-badge">⏳ <?= $reloj_label_dinamico ?> <span id="search-timer">calculando...</span></div>
+                <?php elseif($resultados['hay_pico']): ?>
+                     <div class="countdown-badge" style="background:#27ae60;">✅ Medida finalizada por hoy</div>
+                <?php endif; ?>
+            <?php elseif($fecha_busqueda !== $HOY): ?>
+                 <div class="countdown-badge" style="background:#3498db;">📅 Fecha consultada: <?= $dia_num ?> de <?= $mes_nombre ?></div>
             <?php endif; ?>
         </div>
         
@@ -375,7 +480,7 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
             <section class="plates-section">
                 <div class="plates-card allowed">
                     <h2 class="plates-header-h2">🎉 ¡No hay restricción!</h2>
-                    <div class="free-day-text"><?= $nombre_festivo ? "¡Es Festivo: $nombre_festivo!" : "Día Libre de Medida" ?></div>
+                    <div class="free-day-text"><?= ($motivo_excepcion) ? "¡Novedad: $motivo_excepcion!" : ($nombre_festivo ? "¡Es Festivo: $nombre_festivo!" : "Día Libre de Medida") ?></div>
                     <p style="margin-top:15px; font-size:1.1em;">Todos los vehículos de tipo <strong><?= $nombre_tipo ?></strong> pueden circular sin riesgo de multa.</p>
                 </div>
              </section>
@@ -389,6 +494,35 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
             <a href="/" class="btn-new-action btn-secondary-search">🏚️ Inicio</a>
         </div>
 
+        <?php
+        $rss_url = 'https://picoyplacabogota.com.co/noticias/?feed=rss2';
+        $context = stream_context_create(['http' => ['timeout' => 2]]);
+        $rss_content = @file_get_contents($rss_url, false, $context);
+        if ($rss_content) {
+            $xml = @simplexml_load_string($rss_content);
+            if ($xml) {
+                echo '<section class="card-dashboard news-section area-news" style="margin-top:30px; padding:20px; background:#f8f9fa; border-radius:10px;">';
+                echo '<h2 style="margin-bottom:15px; color:#2c3e50; font-size:1.3em;">📰 Últimas Noticias de Movilidad</h2>';
+                echo '<div class="news-grid">';
+                $count = 0;
+                foreach ($xml->channel->item as $item) {
+                    if ($count >= 3) break;
+                    $title = $item->title;
+                    $link = $item->link;
+                    $date = date('d/m/Y', strtotime($item->pubDate));
+                    echo "<a href='{$link}' class='news-item' target='_blank'>";
+                    echo "<span class='news-date'>📅 {$date}</span>";
+                    echo "<h3 class='news-title'>{$title}</h3>";
+                    echo "</a>";
+                    $count++;
+                }
+                echo '</div>';
+                echo '<div style="text-align:center; margin-top:15px;"><a href="/noticias/" class="btn-app-flashy" style="font-size:0.9em; padding:8px 20px;">Ver todas las noticias</a></div>';
+                echo '</section>';
+            }
+        }
+        ?>
+
         <footer class="footer-simple">
             &copy; <?= date('Y') ?> PicoYPlacaBogota.com.co - Información Informativa. <br>
             <a href="/contacto.php" style="color:#7f8c8d;">Contacto</a> | <a href="/" style="color:#7f8c8d;">Inicio</a>
@@ -398,7 +532,7 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
     <div class="floating-share-container">
         <div class="share-options" id="shareOptions">
             <a href="#" class="share-btn whatsapp" id="share-wa" target="_blank" aria-label="Compartir en WhatsApp">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.976.58 2.023.972 3.152.972 3.182 0 5.768-2.586 5.769-5.766.001-3.18-2.585-5.766-5.769-5.766zm9.969 5.766c0 5.504-4.478 9.982-9.982 9.982a9.92 9.92 0 0 1-4.703-1.185l-5.316 1.396 1.42-5.176a9.92 9.92 0 0 1-1.326-4.966C2.045 6.517 6.523 2.04 12.027 2.04s9.982 4.478 9.982 9.982h-.009z"/></svg>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.976.58 2.023.972 3.152.972 3.182 0 5.768-2.586 5.769-5.766-.001-3.18-2.585-5.766-5.769-5.766zm9.969 5.766c0 5.504-4.478 9.982-9.982 9.982a9.92 9.92 0 0 1-4.703-1.185l-5.316 1.396 1.42-5.176a9.92 9.92 0 0 1-1.326-4.966C2.045 6.517 6.523 2.04 12.027 2.04s9.982 4.478 9.982 9.982h-.009z"/></svg>
             </a>
             <a href="#" class="share-btn facebook" id="share-fb" target="_blank" aria-label="Compartir en Facebook">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036c-2.048 0-2.732 1.35-2.732 3.075v1.272h3.662l-.615 3.667h-3.047v7.98H9.101z"/></svg>
@@ -568,6 +702,9 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
         <div class="header-content">
             <span class="car-icon">🚗</span>
             <h1 class="app-title"><?= $titulo_h1_largo ?></h1>
+            <?php if ($motivo_excepcion): ?>
+                <div class="alert-orden-alcaldia" style="max-width:600px; margin: 10px auto;">📢 Novedad Oficial: <?= $motivo_excepcion ?></div>
+            <?php endif; ?>
             <p class="app-subtitle" style="line-height:1.5; font-size:0.95rem; margin-top:10px; max-width:600px; margin-left:auto; margin-right:auto;"><?= $search_description_text ?></p>
         </div>
     </header>
@@ -587,6 +724,7 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
                 <div class="input-wrapper">
                     <select name="ciudad" id="sel-ciudad" class="app-select">
                         <?php foreach($ciudades as $k => $v): ?>
+                            <?php if(!is_array($v) || !isset($v['nombre'])) continue; ?>
                             <option value="<?= $k ?>" <?= $k===$ciudad_busqueda?'selected':'' ?>><?= $v['nombre'] ?></option>
                         <?php endforeach; ?>
                     </select>
@@ -623,7 +761,7 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
             </div>
             <div class="stat-card purple-gradient">
                 <div class="stat-icon">🕒 HORARIO</div>
-                <div class="stat-value small-text"><?= $resultados['hay_pico'] ? $resultados['horario'] : 'Libre' ?></div>
+                <div class="stat-value small-text"><?= ($resultados['hay_pico'] || $motivo_excepcion) ? $resultados['horario'] : 'Libre' ?></div>
             </div>
         </section>
 
@@ -669,7 +807,7 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
                     <a href="<?= $url_futura ?>" class="city-tag"><?= ucfirst($DIAS_SEMANA[$f_futura->format('N')]) ?> <?= $d_f ?></a>
                 <?php endfor; ?>
                 <h2 style="width:100%; margin-top:20px; font-size:1.3em;">Otras Ciudades</h2>
-                 <?php foreach($ciudades as $k => $v): if($k === $ciudad_busqueda) continue;
+                 <?php foreach($ciudades as $k => $v): if($k === $ciudad_busqueda || !is_array($v) || !isset($v['nombre'])) continue;
                     $d_hoy_loop = date('j'); $m_hoy_loop = $MESES[date('m')]; $a_hoy_loop = date('Y');
                     $url = "/pico-y-placa/$k-$d_hoy_loop-de-$m_hoy_loop-de-$a_hoy_loop";
                 ?>
@@ -750,6 +888,36 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
                 <div class="info-item"><strong>⚠️ Multa:</strong><br>$<?= $MULTA_VALOR ?></div>
             </div>
         </section>
+        
+        <?php
+        $rss_url = 'https://picoyplacabogota.com.co/noticias/?feed=rss2';
+        $context = stream_context_create(['http' => ['timeout' => 2]]);
+        $rss_content = @file_get_contents($rss_url, false, $context);
+        if ($rss_content) {
+            $xml = @simplexml_load_string($rss_content);
+            if ($xml) {
+                echo '<section class="card-dashboard news-section area-news" style="margin-top:30px; padding:20px; background:#f8f9fa; border-radius:10px;">';
+                echo '<h2 style="margin-bottom:15px; color:#2c3e50; font-size:1.3em;">📰 Últimas Noticias de Movilidad</h2>';
+                echo '<div class="news-grid">';
+                $count = 0;
+                foreach ($xml->channel->item as $item) {
+                    if ($count >= 3) break;
+                    $title = $item->title;
+                    $link = $item->link;
+                    $date = date('d/m/Y', strtotime($item->pubDate));
+                    echo "<a href='{$link}' class='news-item' target='_blank'>";
+                    echo "<span class='news-date'>📅 {$date}</span>";
+                    echo "<h3 class='news-title'>{$title}</h3>";
+                    echo "</a>";
+                    $count++;
+                }
+                echo '</div>';
+                echo '<div style="text-align:center; margin-top:15px;"><a href="/noticias/" class="btn-app-flashy" style="font-size:0.9em; padding:8px 20px;">Ver todas las noticias</a></div>';
+                echo '</section>';
+            }
+        }
+        ?>
+
     </main>
 
     <footer class="main-footer">
@@ -845,13 +1013,17 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
             window.addEventListener('beforeinstallprompt', (e) => {
                 e.preventDefault();
                 deferredPrompt = e;
-                btnInstall.style.display = 'flex'; // Mostrar botón flotante
+                // Mostrar botón flotante
+                btnInstall.style.display = 'flex';
                 
                 btnInstall.addEventListener('click', (ev) => {
                     if(ev.target !== btnClosePwa) {
                         btnInstall.style.display = 'none';
                         deferredPrompt.prompt();
                         deferredPrompt.userChoice.then((choiceResult) => {
+                            if (choiceResult.outcome === 'accepted') {
+                                console.log('Usuario aceptó instalar');
+                            }
                             deferredPrompt = null;
                         });
                     }
@@ -872,15 +1044,15 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
             }
         }
         
-        // --- REGISTRO DEL SERVICE WORKER (IMPORTANTE PARA INSTALAR APP) ---
+        // --- REGISTRO DEL SERVICE WORKER ---
         if ('serviceWorker' in navigator) {
-          window.addEventListener('load', function() {
-            navigator.serviceWorker.register('/sw.js').then(function(registration) {
-              console.log('ServiceWorker registration successful with scope: ', registration.scope);
-            }, function(err) {
-              console.log('ServiceWorker registration failed: ', err);
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    console.log('ServiceWorker registrado con éxito: ', registration.scope);
+                }, function(err) {
+                    console.log('Fallo al registrar ServiceWorker: ', err);
+                });
             });
-          });
         }
         
         // --- TRACKING DE INSTALACIÓN (GA4) ---
@@ -892,6 +1064,25 @@ $bg_search_color = $resultados['hay_pico'] ? '#fff5f5' : '#f0fff4';
             });
         });
     </script>
+
 <?php endif; ?>
+
+    <script>
+        const TARGET_TS = <?= ($fecha_busqueda === $HOY) ? $search_target_ts : 0 ?>;
+        const OFFSET_SEARCH = new Date().getTime() - <?= time() * 1000 ?>;
+        function updateSearchTimer() {
+            if(TARGET_TS === 0) return;
+            const diff = TARGET_TS - (new Date().getTime() - OFFSET_SEARCH);
+            const el = document.getElementById('search-timer');
+            if(!el) return;
+            if (diff <= 0) { el.innerText = "00h 00m 00s"; return; }
+            let h = Math.floor(diff / 3600000);
+            let m = Math.floor((diff % 3600000) / 60000);
+            let s = Math.floor((diff % 60000) / 1000);
+            el.innerText = (h<10?'0':'')+h+"h "+(m<10?'0':'')+m+"m "+(s<10?'0':'')+s+"s";
+        }
+        if(TARGET_TS > 0) setInterval(updateSearchTimer, 1000);
+    </script>
+
 </body>
-</html>	
+</html>
